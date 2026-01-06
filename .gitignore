@@ -1,6 +1,13 @@
+# build
 **/target/
+
+# IDE
 .idea
 *.iml
+
+# compiled
 *.class
-*Test.java
-**/test/
+
+# local config
+sky-server/src/main/resources/application-dev.yml
+
