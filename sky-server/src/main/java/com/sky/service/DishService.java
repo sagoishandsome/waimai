@@ -28,7 +28,7 @@ public interface DishService {
      *根据主键查询
      * @param ids
      */
-    @Select("select * from dish where id=#{id}")
+
     void deleteBatch(List<Long> ids);
 
     DishVO getByIdWithFlavor(Long id);
