@@ -76,4 +76,19 @@ BeanUtils.copyProperties(setmeal,setmealVO);
 setmealVO.setSetmealDishes(setmealDishes);
         return setmealVO;
     }
+
+    @Override
+    public void update(SetmealDTO setmealDTO) {
+        Setmeal setmeal=new Setmeal();
+        BeanUtils.copyProperties(setmealDTO,setmeal);
+        setmealMapper.update(setmeal);
+        setmealDishMapper.deleteById(setmealDTO.getId());
+        List<SetmealDish>setmealDishes=setmealDTO.getSetmealDishes();
+        if(setmealDishes!=null&&setmealDishes.size()>0){
+            setmealDishes.forEach(setmealDish -> {
+                setmealDish.setSetmealId(setmealDTO.getId());
+            });
+            setmealDishMapper.insertbatch(setmealDishes);
+        }
+    }
 }

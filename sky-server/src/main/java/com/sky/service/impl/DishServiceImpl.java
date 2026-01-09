@@ -38,6 +38,8 @@ public class DishServiceImpl implements DishService {
     private DishFlavorMapper dishFlavorMapper;
     @Autowired
     private SetmealDishMapper setmealDishMapper;
+    @Autowired
+    private  SetmealMapper setmealMapper;
 
     @Override
     public void startOrStop(Integer status, Long id) {
@@ -56,7 +58,7 @@ if(status==StatusConstant.DISABLE){
                     .id(setmealId)
                     .status(StatusConstant.DISABLE)
                     .build();
-            SetmealMapper.update(setmeal);
+            setmealMapper.update(setmeal);
         }
     }
 }

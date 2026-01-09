@@ -14,10 +14,8 @@ import java.util.List;
 
 @Mapper
 public interface SetmealMapper {
-
-    static void update(Setmeal setmeal) {
-
-    }
+@AutoFill(OperationType.INSERT)
+     void update(Setmeal setmeal) ;
 
     /**
      * 根据分类id查询套餐的数量
