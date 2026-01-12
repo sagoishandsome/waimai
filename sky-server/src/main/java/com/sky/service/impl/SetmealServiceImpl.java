@@ -106,6 +106,7 @@ setmealVO.setSetmealDishes(setmealDishes);
                 dishes.forEach(dish -> {
                     if(dish.getStatus()==StatusConstant.DISABLE)
                         throw new  SetmealEnableFailedException(MessageConstant.SETMEAL_ENABLE_FAILED);
+                    
                 });
             }
         }
