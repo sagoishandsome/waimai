@@ -38,7 +38,7 @@ public class DishController {
         if (list != null && list.size() > 0) {
             return Result.success(list);
         }
-
+    //不存在则查询数据库
         Dish dish = new Dish();
         dish.setCategoryId(categoryId);
         dish.setStatus(StatusConstant.ENABLE);// 查询起售中的菜品
