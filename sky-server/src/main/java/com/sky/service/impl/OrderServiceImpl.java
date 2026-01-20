@@ -9,7 +9,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import com.alibaba.fastjson.JSONObject;
 import com.sky.mapper.*;
+import com.sky.websocket.WebSocketServer;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -70,8 +72,8 @@ public class OrderServiceImpl implements OrderService {
      @Autowired
      private UserMapper userMapper;
 
-  //  @Autowired
-  //  private WebSocketServer webSocketServer;
+    @Autowired
+    private WebSocketServer webSocketServer;
 
     /**
      * 用户下单
@@ -134,68 +136,76 @@ public class OrderServiceImpl implements OrderService {
         return orderSubmitVO;
     }
 
-//    /**
-//     * 订单支付
-//     *
-//     * @param ordersPaymentDTO
-//     * @return
-//     */
-//    public OrderPaymentVO payment(OrdersPaymentDTO ordersPaymentDTO) throws Exception {
-//        // 当前登录用户id
-//        // Long userId = BaseContext.getCurrentId();
-//        // User user = userMapper.getById(userId);
-//
-//        // 直接调用paySuccess方法，模拟支付成功
-//        paySuccess(ordersPaymentDTO.getOrderNumber());
-//
+    /**
+     * 订单支付
+     *
+     * @param ordersPaymentDTO
+     * @return
+     */
+    public OrderPaymentVO payment(OrdersPaymentDTO ordersPaymentDTO) throws Exception {
+        // 当前登录用户id
+         Long userId = BaseContext.getCurrentId();
+         User user = userMapper.getById(userId);
+
+        // 直接调用paySuccess方法，模拟支付成功
+        paySuccess(ordersPaymentDTO.getOrderNumber());
+
 //        // 调用微信支付接口，生成预支付交易单
-//        // JSONObject jsonObject = weChatPayUtil.pay(
-//        // ordersPaymentDTO.getOrderNumber(), // 商户订单号
-//        // new BigDecimal(0.01), // 支付金额，单位 元
-//        // "苍穹外卖订单", // 商品描述
-//        // user.getOpenid() // 微信用户的openid
-//        // );
+//         JSONObject jsonObject = weChatPayUtil.pay(
+//         ordersPaymentDTO.getOrderNumber(), // 商户订单号
+//         new BigDecimal(0.01), // 支付金额，单位 元
+//         "苍穹外卖订单", // 商品描述
+//         user.getOpenid() // 微信用户的openid
+//         );
 //
-//        // if (jsonObject.getString("code") != null &&
-//        // jsonObject.getString("code").equals("ORDERPAID")) {
-//        // throw new OrderBusinessException("该订单已支付");
-//        // }
+//         if (jsonObject.getString("code") != null &&
+//         jsonObject.getString("code").equals("ORDERPAID")) {
+//         throw new OrderBusinessException("该订单已支付");
+//         }
 //
-//        // OrderPaymentVO vo = jsonObject.toJavaObject(OrderPaymentVO.class);
-//        // vo.setPackageStr(jsonObject.getString("package"));
-//
-//        // return vo;
-//        return null;
-//    }
-//
-//    /**
-//     * 支付成功，修改订单状态
-//     *
-//     * @param outTradeNo
-//     */
-////    public void paySuccess(String outTradeNo) {
-////
-////        // 根据订单号查询订单
-////        Orders ordersDB = orderMapper.getByNumber(outTradeNo);
-////
-////        // 根据订单id更新订单的状态、支付方式、支付状态、结账时间
-////        Orders orders = Orders.builder()
-////                .id(ordersDB.getId())
-////                .status(Orders.TO_BE_CONFIRMED)
-////                .payStatus(Orders.PAID)
-////                .checkoutTime(LocalDateTime.now())
-////                .build();
-////
-////        orderMapper.update(orders);
-////
-////        // 通过websocket通知商家
-////        Map<String, Object> map = new HashMap<>();
-////        map.put("type", 1); // 1:来单通知
-////        map.put("orderId", ordersDB.getId());
-////        map.put("content", "订单号: " + outTradeNo);
-////        String msg = JSON.toJSONString(map);
-////        webSocketServer.sendToAllClient(msg);
-////    }
+//         OrderPaymentVO vo = jsonObject.toJavaObject(OrderPaymentVO.class);
+//         vo.setPackageStr(jsonObject.getString("package"));
+        OrderPaymentVO vo = OrderPaymentVO.builder()
+                .nonceStr("mock_nonce_str")  // 随机字符串
+                .paySign("mock_pay_sign")    // 签名
+                .timeStamp(String.valueOf(System.currentTimeMillis() / 1000)) // 时间戳
+                .signType("RSA")             // 签名算法
+                .packageStr("prepay_id=mock_123456") // 预支付会话标识
+                .build();
+
+        return vo;
+
+
+    }
+
+    /**
+     * 支付成功，修改订单状态
+     *
+     * @param outTradeNo
+     */
+    public void paySuccess(String outTradeNo) {
+
+        // 根据订单号查询订单
+        Orders ordersDB = orderMapper.getByNumber(outTradeNo);
+
+        // 根据订单id更新订单的状态、支付方式、支付状态、结账时间
+        Orders orders = Orders.builder()
+                .id(ordersDB.getId())
+                .status(Orders.TO_BE_CONFIRMED)
+                .payStatus(Orders.PAID)
+                .checkoutTime(LocalDateTime.now())
+                .build();
+
+        orderMapper.update(orders);
+
+        // 通过websocket通知商家
+        Map<String, Object> map = new HashMap<>();
+        map.put("type", 1); // 1:来单通知
+        map.put("orderId", ordersDB.getId());
+        map.put("content", "订单号: " + outTradeNo);
+        String msg = JSON.toJSONString(map);
+        webSocketServer.sendToAllClient(msg);
+    }
 //
 //    /**
 //     * 查询历史订单
