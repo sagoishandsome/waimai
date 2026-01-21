@@ -293,5 +293,52 @@ public class OrderServiceImpl implements OrderService {
         shoppingCartMapper.insertBatch(shoppingCartList);
     }
 
+    @Override
+    public PageResult conditionSearch(OrdersPageQueryDTO ordersPageQueryDTO) {
+        PageHelper.startPage(ordersPageQueryDTO.getPage(),ordersPageQueryDTO.getPageSize());
+        Page<Orders>page=orderMapper.pageQuery(ordersPageQueryDTO);
+        List<OrderVO>orderVOList=getOrderVOList(page);
+        return new PageResult(page.getTotal(),orderVOList);
 
+
+    }
+
+
+
+    private List<OrderVO> getOrderVOList(Page<Orders> page) {
+    List<OrderVO>orderVOList=new ArrayList<>();
+    List<Orders>ordersList=page.getResult();
+    if(!CollectionUtils.isEmpty(ordersList)){
+        for(Orders orders:ordersList){
+            OrderVO orderVO=new OrderVO();
+            BeanUtils.copyProperties(orders,orderVO);
+            String orderDishes=getdishes(orders);
+            orderVO.setOrderDishes(orderDishes);
+            orderVOList.add(orderVO);
+        }
+    }
+return orderVOList;
+    }
+
+    private String getdishes(Orders orders) {
+        List<OrderDetail>orderDetailList=orderDetailMapper.getByOrderId(orders.getId());
+        List<String>orderDishList=orderDetailList.stream().map(x->{
+            String orderDish=x.getName()+"*"+x.getNumber()+";";
+            return orderDish;
+        }).collect(Collectors.toList());
+        return String.join("",orderDishList);
+    }
+
+    @Override
+    public OrderStatisticsVO statistics() {
+        Integer tobeconfirmed=orderMapper.countStatus(Orders.TO_BE_CONFIRMED);
+        Integer confirmed=orderMapper.countStatus(Orders.CONFIRMED);
+        Integer DeliverryInProgress=orderMapper.countStatus(Orders.DELIVERY_IN_PROGRESS);
+        OrderStatisticsVO orderStatisticsVO=new OrderStatisticsVO();
+        orderStatisticsVO.setToBeConfirmed(tobeconfirmed);
+        orderStatisticsVO.setConfirmed(confirmed);
+        orderStatisticsVO.setDeliveryInProgress(DeliverryInProgress);
+
+        return orderStatisticsVO;
+    }
 }

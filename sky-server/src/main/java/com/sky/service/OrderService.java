@@ -52,4 +52,8 @@ public interface OrderService {
     void UsercancelByID(Long id);
 
     void repetition(Long id);
+
+    PageResult conditionSearch(OrdersPageQueryDTO ordersPageQueryDTO);
+
+    OrderStatisticsVO statistics();
 }
