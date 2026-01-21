@@ -63,58 +63,37 @@ public class OrderController {
      * @param status
      * @return
      */
-//    @GetMapping("/historyOrders")
-//    public Result<PageResult<OrderVO>> page(int page, int pageSize, Integer status) {
-//        log.info("查询历史订单，page={},pageSize={},status={}", page, pageSize, status);
-//        PageResult<OrderVO> pageResult = orderService.pageQueryByUser(page, pageSize, status);
-//        return Result.success(pageResult);
-//    }
-//
-//    /**
-//     * 查询订单详情
-//     *
-//     * @param id
-//     * @return
-//     */
-//    @GetMapping("/orderDetail/{id}")
-//    public Result<OrderVO> details(@PathVariable("id") Long id) {
-//        OrderVO orderVO = orderService.details(id);
-//        return Result.success(orderVO);
-//    }
-//
-//    /**
-//     * 用户取消订单
-//     *
-//     * @return
-//     */
-//    @PutMapping("/cancel/{id}")
-//    public Result<String> cancel(@PathVariable("id") Long id) throws Exception {
-//        orderService.userCancelById(id);
-//        return Result.success();
-//    }
-//
-//    /**
-//     * 再来一单
-//     *
-//     * @param id
-//     * @return
-//     */
-//    @PostMapping("/repetition/{id}")
-//    public Result<String> repetition(@PathVariable Long id) {
-//        orderService.repetition(id);
-//        return Result.success();
-//    }
-//
-//    /**
-//     * 用户催单
-//     *
-//     * @param id
-//     * @return
-//     */
-//    @GetMapping("/reminder/{id}")
-//    public Result<String> reminder(@PathVariable("id") Long id) {
-//        orderService.reminder(id);
-//        return Result.success();
-//    }
+    @GetMapping("/historyOrders")
+    public Result<PageResult> page(int page, int pageSize, Integer status) {
+        log.info("查询历史订单，page={},pageSize={},status={}", page, pageSize, status);
+        PageResult pageResult = orderService.pageQueryByUser(page, pageSize, status);
+        return Result.success(pageResult);
+    }
+
+    /**
+     * 查询订单详情
+     *
+     * @param id
+     * @return
+     */
+    @GetMapping("/orderDetail/{id}")
+    public Result<OrderVO> details(@PathVariable("id") Long id) {
+        OrderVO orderVO = orderService.details(id);
+        return Result.success(orderVO);
+    }
+
+    @PutMapping("/cancel/{id}")
+    public  Result cancel(@PathVariable("id")Long id){
+        orderService.UsercancelByID(id);
+        return Result.success();
+    }
+
+    @PostMapping("/repetition/{id}")
+    public Result repetition(@PathVariable("id")Long id){
+        orderService.repetition(id);
+        return Result.success();
+    }
+
+
 
 }
