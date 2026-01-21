@@ -13,6 +13,7 @@ import com.alibaba.fastjson.JSONObject;
 import com.fasterxml.jackson.databind.ser.Serializers;
 import com.sky.mapper.*;
 import com.sky.websocket.WebSocketServer;
+import org.aspectj.weaver.ast.Or;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -340,5 +341,78 @@ return orderVOList;
         orderStatisticsVO.setDeliveryInProgress(DeliverryInProgress);
 
         return orderStatisticsVO;
+    }
+
+    @Override
+    public void confirm(OrdersConfirmDTO ordersConfirmDTO) {
+        Orders orders=Orders.builder()
+                .id(ordersConfirmDTO.getId())
+                .status(Orders.CONFIRMED)
+                .build();
+        orderMapper.update(orders);
+    }
+
+    @Override
+    public void rejection(OrdersRejectionDTO ordersRejectionDTO) {
+        Orders ordersdb=orderMapper.getById(ordersRejectionDTO.getId());
+        if(ordersdb==null||!(ordersdb.getStatus()).equals(Orders.TO_BE_CONFIRMED)){
+            throw new OrderBusinessException(MessageConstant.ORDER_STATUS_ERROR);
+        }
+        Integer Paystatus=ordersdb.getPayStatus();
+        if(Paystatus==Orders.PAID){
+            log.info("退款成功，订单号码{}",ordersdb.getNumber());
+        }
+        Orders orders=new Orders();
+        orders.setId(ordersdb.getId());
+        orders.setCancelTime(LocalDateTime.now());
+        orders.setStatus(Orders.CANCELLED);
+        orders.setRejectionReason(ordersRejectionDTO.getRejectionReason());
+        orderMapper.update(orders);
+
+    }
+
+    @Override
+    public void cancel(OrdersCancelDTO ordersCancelDTO) {
+
+        Orders ordersdb=orderMapper.getById(ordersCancelDTO.getId());
+
+        Integer Paystatus=ordersdb.getPayStatus();
+        if(Paystatus==Orders.PAID){
+            log.info("退款成功，订单号码{}",ordersdb.getNumber());
+        }
+        Orders orders=new Orders();
+        orders.setId(ordersdb.getId());
+        orders.setCancelTime(LocalDateTime.now());
+        orders.setStatus(Orders.CANCELLED);
+        orders.setRejectionReason(ordersCancelDTO.getCancelReason());
+        orderMapper.update(orders);
+
+
+    }
+
+    @Override
+    public void delivery(Long id) {
+        Orders ordersdb=orderMapper.getById(id);
+        if(ordersdb==null||!ordersdb.getStatus().equals(Orders.CONFIRMED)){
+            throw new OrderBusinessException(MessageConstant.ORDER_STATUS_ERROR);
+        }
+        Orders orders=new Orders();
+        orders.setId(ordersdb.getId());
+        orders.setStatus(Orders.DELIVERY_IN_PROGRESS);
+
+        orderMapper.update(orders);
+    }
+
+    @Override
+    public void complete(Long id) {
+        Orders ordersdb=orderMapper.getById(id);
+        if(ordersdb==null||!ordersdb.getStatus().equals(Orders.DELIVERY_IN_PROGRESS)){
+            throw new OrderBusinessException(MessageConstant.ORDER_STATUS_ERROR);
+        }
+        Orders orders=new Orders();
+        orders.setId(ordersdb.getId());
+        orders.setStatus(Orders.COMPLETED);
+
+        orderMapper.update(orders);
     }
 }
