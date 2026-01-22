@@ -24,8 +24,8 @@ public class OrderTask {
      * 
      * @return
      */
-  //  @Scheduled(cron = "0 * * * * ?") // 每分钟执行一次
-    @Scheduled(cron = "1/5 * * * * ?")
+    @Scheduled(cron = "0 * * * * ?") // 每分钟执行一次
+
     public void processTimeoutOrder() {
         log.info("处理超时订单");
         LocalDateTime tm = LocalDateTime.now().plusMinutes(-15);
@@ -45,8 +45,8 @@ public class OrderTask {
      * 
      * @return
      */
-   // @Scheduled(cron = "0 0 1 * * ?") // 每天凌晨1点执行一次
-    @Scheduled(cron = "0/5 * * * * ?")
+    @Scheduled(cron = "0 0 1 * * ?") // 每天凌晨1点执行一次
+
     public void processDeliveryOrder() {
         log.info("处理派送中订单");
         LocalDateTime tm = LocalDateTime.now().plusHours(-1);

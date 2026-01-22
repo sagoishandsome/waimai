@@ -1,5 +1,6 @@
 package com.sky.websocket;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
 import javax.websocket.OnClose;
@@ -8,6 +9,7 @@ import javax.websocket.Session;
 import javax.websocket.server.PathParam;
 import javax.websocket.server.ServerEndpoint;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -36,19 +38,34 @@ public class WebSocketServer {
         sessionMap.remove(sid);
     }
 
+    private static final ObjectMapper objectMapper = new ObjectMapper();
+
     /**
      * 群发消息（即你在 paySuccess 中调用的方法）
-     * @param message JSON字符串
+     * @param
      */
-    public void sendToAllClient(String message) {
+    public void sendToAllClient(String content) {
         Collection<Session> sessions = sessionMap.values();
-        for (Session session : sessions) {
-            try {
-                // 服务器向客户端发送文本消息
-                session.getBasicRemote().sendText(message);
-            } catch (Exception e) {
-                e.printStackTrace();
+        try {
+            // 1. 构造一个简单的对象或 Map
+            Map<String, Object> map = new HashMap<>();
+            map.put("content", content);
+            map.put("timestamp", System.currentTimeMillis());
+
+            // 2. 将对象转为 JSON 字符串
+            // 结果会变成: {"content":"这是来自服务端的消息...","timestamp":17000000000}
+            String jsonMessage = objectMapper.writeValueAsString(map);
+
+            for (Session session : sessions) {
+                try {
+                    // 3. 发送 JSON 字符串
+                    session.getBasicRemote().sendText(jsonMessage);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
             }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 }
