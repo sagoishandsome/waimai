@@ -427,6 +427,19 @@ return orderVOList;
         orderMapper.update(orders);
     }
 
+    @Override
+    public void reminder(Long id) {
+        Orders ordersdb=orderMapper.getById(id);
+        if(ordersdb==null){
+            throw new OrderBusinessException(MessageConstant.ORDER_STATUS_ERROR);
+        }
+        Map map=new HashMap();
+        map.put("type",2);
+        map.put("orderId",id);
+        map.put("content","订单号"+ordersdb.getNumber());
+        webSocketServer.sendToAllClient(JSON.toJSONString(map));
+    }
+
     /**
      * 检查客户的收货地址是否超出配送范围
      * @param address
