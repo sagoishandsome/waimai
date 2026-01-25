@@ -1,5 +1,11 @@
 server:
   port: 8080
+  tomcat:
+    threads:
+      max: 1000       # 最大工作线程数（默认200，太小了）
+      min-spare: 100  # 最小空闲线程数
+    max-connections: 2000 # 最大连接数
+    accept-count: 1000    # 队列长度
 
 spring:
   profiles:
@@ -16,7 +22,12 @@ spring:
   redis:
     host: ${sky.redis.host}
     port: ${sky.redis.port}
-    database: ${sky.redis.database}
+    lettuce:
+      pool:
+        max-active: 50 # 最大连接数
+        max-idle: 10   # 最大空闲连接
+        min-idle: 2
+        max-wait: 2000ms # 连接等待时间
 
 mybatis:
   #mapper配置文件
@@ -57,6 +68,10 @@ sky:
     address: ${sky.shop.address}
   baidu:
     ak: ${sky.baidu.ak}
+rocketmq:
+  name-server: 127.0.0.1:9876
+  producer:
+    group: seckill-group
 
 
 

@@ -20,6 +20,8 @@ import com.sky.vo.DishVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +42,17 @@ public class DishServiceImpl implements DishService {
     private SetmealDishMapper setmealDishMapper;
     @Autowired
     private  SetmealMapper setmealMapper;
+
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
+
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate; // 注入这个特殊的 Template
+
+    private String stockKey(Long dishId){
+        return "sky:stock:dish:" + dishId;
+    }
+
 
     @Override
     public void startOrStop(Integer status, Long id) {
@@ -196,6 +209,38 @@ List<Long> setmealIds=setmealDishMapper.getSetmealIdsByDishIds(ids);
         }
 
         return dishVOList;
+    }
+
+
+
+    @Override
+    public void initStockToRedis() {
+        List<Dish> list = dishMapper.listStock();
+        for (Dish dish : list) {
+            String key = "sky:stock:dish:" + dish.getId();
+            // 使用 stringRedisTemplate，确保存进去的是纯数字文本 "100"，不带引号
+            stringRedisTemplate.opsForValue().set(key, String.valueOf(dish.getStock()));
+        }
+    }
+
+    @Override
+    public Integer getStockFromRedis(Long dishId) {
+        Object val = redisTemplate.opsForValue().get(stockKey(dishId));
+        if (val == null) return null;
+        return Integer.valueOf(val.toString());
+    }
+
+    @Override
+    public void setStock(Long dishId, Integer stock) {
+        // 1. 更新数据库
+        dishMapper.updateStock(dishId, stock);
+        // 2. 更新 Redis
+        redisTemplate.opsForValue().set(stockKey(dishId), stock);
+    }
+
+    @Override
+    public List<Dish> listStock() {
+        return dishMapper.listStock();
     }
 
 

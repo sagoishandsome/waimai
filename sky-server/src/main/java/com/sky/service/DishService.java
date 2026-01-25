@@ -12,6 +12,7 @@ import java.util.List;
 
 public interface DishService {
 
+
    void startOrStop(Integer status, Long id);
 
  /**
@@ -43,4 +44,11 @@ public interface DishService {
     * @return
     */
    List<DishVO> listWithFlavor(Dish dish);
+
+    void initStockToRedis();
+    Integer getStockFromRedis(Long dishId);
+    void setStock(Long dishId, Integer stock);
+
+    List<Dish> listStock();
+
 }

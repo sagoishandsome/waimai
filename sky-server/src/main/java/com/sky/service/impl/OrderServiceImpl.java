@@ -2,24 +2,29 @@ package com.sky.service.impl;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
+import com.alibaba.csp.sentinel.annotation.SentinelResource;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.fasterxml.jackson.databind.ser.Serializers;
+import com.sky.dto.*;
+import com.sky.entity.*;
+import com.sky.exception.BaseException;
 import com.sky.mapper.*;
 import com.sky.utils.HttpClientUtil;
 import com.sky.websocket.WebSocketServer;
 
+import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.aspectj.weaver.ast.Or;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
@@ -29,17 +34,6 @@ import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.sky.constant.MessageConstant;
 import com.sky.context.BaseContext;
-import com.sky.dto.OrdersCancelDTO;
-import com.sky.dto.OrdersConfirmDTO;
-import com.sky.dto.OrdersPageQueryDTO;
-import com.sky.dto.OrdersPaymentDTO;
-import com.sky.dto.OrdersRejectionDTO;
-import com.sky.dto.OrdersSubmitDTO;
-import com.sky.entity.AddressBook;
-import com.sky.entity.OrderDetail;
-import com.sky.entity.Orders;
-import com.sky.entity.ShoppingCart;
- import com.sky.entity.User;
 import com.sky.exception.AddressBookBusinessException;
 import com.sky.exception.OrderBusinessException;
 import com.sky.exception.ShoppingCartBusinessException;
@@ -62,6 +56,8 @@ public class OrderServiceImpl implements OrderService {
 
     @Autowired
     private OrderMapper orderMapper;
+    @Autowired
+    private  SetmealDishMapper setmealDishMapper;
 
     @Autowired
     private OrderDetailMapper orderDetailMapper;
@@ -81,11 +77,28 @@ public class OrderServiceImpl implements OrderService {
     @Autowired
     private WebSocketServer webSocketServer;
 
+    @Autowired
+    private RocketMQTemplate rocketMQTemplate;
+
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
     @Value("${sky.shop.address}")
     private String shopAddress;
 
     @Value("${sky.baidu.ak}")
     private String ak;
+
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
+    @Autowired
+    private DefaultRedisScript<Long> stockLuaScript;
+
+    public OrderSubmitVO handleOrderBlock(OrdersSubmitDTO ordersSubmitDTO, BlockException ex) {
+        log.warn("触发流控限制，请求被拦截：{}", ex.getMessage());
+        // 抛出一个自定义异常，让 GlobalExceptionHandler 捕获并返回“前方拥堵，请稍后再试”
+        throw new BaseException("系统繁忙，外卖小哥正在拼命奔跑中，请稍后再试！");
+    }
+
 
     /**
      * 用户下单
@@ -95,59 +108,107 @@ public class OrderServiceImpl implements OrderService {
      */
     @Override
     @Transactional
+    @SentinelResource(value = "submitOrder", blockHandler = "handleOrderBlock")
     public OrderSubmitVO submitOrder(OrdersSubmitDTO ordersSubmitDTO) {
-        // 业务异常处理，地址为空、购物车为空
+
+        // 1. 地址校验（同步强一致）
         AddressBook addressBook = addressBookMapper.getById(ordersSubmitDTO.getAddressBookId());
         if (addressBook == null) {
-            // 抛出异常
             throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_IS_NULL);
         }
-        checkOutOfRange(addressBook.getCityName()+addressBook.getDistrictName()+addressBook.getDetail());
+
+        // 2. 查询当前用户购物车（DB 仍然是真实来源）
         Long userId = BaseContext.getCurrentId();
-        ShoppingCart shoppingCart = new ShoppingCart();
-        shoppingCart.setUserId(userId);
-        List<ShoppingCart> cartList = shoppingCartMapper.list(shoppingCart);
+
+        ShoppingCart query = new ShoppingCart();
+        query.setUserId(userId);
+        List<ShoppingCart> cartList = shoppingCartMapper.list(query);
+
         if (cartList == null || cartList.isEmpty()) {
-            // 抛出异常
             throw new ShoppingCartBusinessException(MessageConstant.SHOPPING_CART_IS_NULL);
         }
 
-        // 订单表插入一条数据
-        Orders orders = new Orders();
-        BeanUtils.copyProperties(ordersSubmitDTO, orders);
-        orders.setOrderTime(LocalDateTime.now());
-        orders.setPayStatus(Orders.UN_PAID);
-        orders.setStatus(Orders.PENDING_PAYMENT);
-        orders.setNumber(String.valueOf(System.currentTimeMillis()));
-        orders.setPhone(addressBook.getPhone());
-        orders.setConsignee(addressBook.getConsignee());
-        orders.setUserId(userId);
+        // 3. 准备数据
+        List<String> keys = new ArrayList<>();
+        List<String> args = new ArrayList<>(); // 明确使用 String
+
+        for (ShoppingCart item : cartList) {
+            if (item.getDishId() != null) {
+                keys.add("sky:stock:dish:" + item.getDishId());
+                args.add(item.getNumber().toString()); // 转成字符串 "2"
+            } else if (item.getSetmealId() != null) {
+                List<SetmealDish> dishList = setmealDishMapper.getBysetmealId(item.getSetmealId());
+                for (SetmealDish sd : dishList) {
+                    keys.add("sky:stock:dish:" + sd.getDishId());
+                    // 计算套餐内菜品总量
+                    Integer totalNeed = sd.getCopies() * item.getNumber();
+                    args.add(totalNeed.toString()); // 转成字符串
+                }
+            }
+        }
+
+// 4. 执行脚本
+// 注意：args.toArray() 必须确保传给的是序列化友好的格式
+        Long result = stringRedisTemplate.execute(
+                stockLuaScript,
+                keys,
+                args.toArray(new String[0]) // 确保转成 String 数组
+        );
+
+
+        if (result == null || result < 0) {
+            throw new BaseException("部分商品库存不足，下单失败");
+        }
+        // 4. 生成订单号
+        String orderNumber = System.currentTimeMillis() + "_" + userId;
+
+        // 4.1 同步插入订单表（主表）
+        // 4.1 完善订单对象赋值
+        Orders orders = Orders.builder()
+                .number(orderNumber)
+                .userId(userId)
+                .status(Orders.PENDING_PAYMENT)
+                .payStatus(Orders.UN_PAID)
+                .payMethod(ordersSubmitDTO.getPayMethod())
+                .amount(ordersSubmitDTO.getAmount())
+                .orderTime(LocalDateTime.now())
+
+                .phone(addressBook.getPhone())
+                .address(addressBook.getDetail())
+                .consignee(addressBook.getConsignee())
+                .addressBookId(ordersSubmitDTO.getAddressBookId())
+                .remark(ordersSubmitDTO.getRemark())
+                .estimatedDeliveryTime(ordersSubmitDTO.getEstimatedDeliveryTime())
+                .deliveryStatus(ordersSubmitDTO.getDeliveryStatus())
+                .packAmount(ordersSubmitDTO.getPackAmount())
+                .tablewareNumber(ordersSubmitDTO.getTablewareNumber())
+                .tablewareStatus(ordersSubmitDTO.getTablewareStatus())
+                .build();
 
         orderMapper.insert(orders);
 
-        // 订单详情表插入多条数据
-        List<OrderDetail> orderDetailList = new ArrayList<>();
-        cartList.forEach(cart -> {
-            OrderDetail orderDetail = new OrderDetail();
-            BeanUtils.copyProperties(cart, orderDetail);
-            orderDetail.setOrderId(orders.getId());
-            orderDetailList.add(orderDetail);
-        });
-        orderDetailMapper.insertBatch(orderDetailList);
 
-        // 清空购物车
-        shoppingCartMapper.deleteByUserId(userId);
 
-        // 返回 VO
-        OrderSubmitVO orderSubmitVO = OrderSubmitVO.builder()
-                .id(orders.getId())
+
+
+
+        // 5. 构建下单消息（异步消费）
+        OrderMsgDTO msg = OrderMsgDTO.builder()
+                .orderId(orders.getId()) // 带着主键 ID 过去
+                .orderNumber(orderNumber).userId(userId).cartList(cartList)
+                .amount(ordersSubmitDTO.getAmount()).address(addressBook.getDetail())
+                .build();
+        rocketMQTemplate.convertAndSend("SKY_ORDER_TOPIC", msg);
+
+        // 6. 返回 VO
+        return OrderSubmitVO.builder().id(orders.getId())
+                .orderNumber(orderNumber)
                 .orderTime(orders.getOrderTime())
-                .orderNumber(orders.getNumber())
                 .orderAmount(orders.getAmount())
                 .build();
-
-        return orderSubmitVO;
     }
+
+
 
     /**
      * 订单支付
@@ -198,10 +259,11 @@ public class OrderServiceImpl implements OrderService {
      */
     public void paySuccess(String outTradeNo) {
 
-        // 根据订单号查询订单
         Orders ordersDB = orderMapper.getByNumber(outTradeNo);
+        if (ordersDB == null) {
+            throw new BaseException("订单不存在：" + outTradeNo);
+        }
 
-        // 根据订单id更新订单的状态、支付方式、支付状态、结账时间
         Orders orders = Orders.builder()
                 .id(ordersDB.getId())
                 .status(Orders.TO_BE_CONFIRMED)
@@ -211,14 +273,13 @@ public class OrderServiceImpl implements OrderService {
 
         orderMapper.update(orders);
 
-        // 通过websocket通知商家
         Map<String, Object> map = new HashMap<>();
-        map.put("type", 1); // 1:来单通知
+        map.put("type", 1);
         map.put("orderId", ordersDB.getId());
         map.put("content", "订单号: " + outTradeNo);
-        String msg = JSON.toJSONString(map);
-        webSocketServer.sendToAllClient(msg);
+        webSocketServer.sendToAllClient(JSON.toJSONString(map));
     }
+
 
     /**
      * 查询历史订单

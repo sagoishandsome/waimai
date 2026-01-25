@@ -30,6 +30,24 @@ public class DishController {
     @Autowired
     private RedisTemplate redisTemplate;
 
+
+
+
+    @PostMapping("/stock/init")
+    public void initStock() {
+        dishService.initStockToRedis();
+    }
+
+    @GetMapping("/stock/{dishId}")
+    public Integer getStock(@PathVariable Long dishId) {
+        return dishService.getStockFromRedis(dishId);
+    }
+
+    @PutMapping("/stock/{dishId}/{stock}")
+    public void setStock(@PathVariable Long dishId, @PathVariable Integer stock) {
+        dishService.setStock(dishId, stock);
+    }
+
     @PostMapping
     @ApiOperation("新增菜品{}")
     public Result save(@RequestBody DishDTO dishDTO){
