@@ -59,4 +59,6 @@ public interface DishMapper {
      */
     @Select("select id, name, stock from dish where status = 1")
     List<Dish> listaliveStock();
+
+    List<Dish> getByLikeName(String dishName);
 }

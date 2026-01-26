@@ -46,6 +46,7 @@ public class OrderMsgListener implements RocketMQListener<OrderMsgDTO> {
         log.info("开始异步处理订单入库：{}", msg.getOrderNumber());
 
 
+// 假设你的订单详情列表叫 orderDetailList
 
 
         // 2. 批量插入 OrderDetail (补全数据)
@@ -55,7 +56,12 @@ public class OrderMsgListener implements RocketMQListener<OrderMsgDTO> {
             detail.setOrderId(msg.getOrderId()); // 使用主表 ID
             return detail;
         }).collect(Collectors.toList());
-        orderDetailMapper.insertBatch(detailList);
+        // 假设你的订单详情列表叫 orderDetailList
+        if (detailList != null && !detailList.isEmpty()) {
+            orderDetailMapper.insertBatch(detailList);
+        } else {
+            log.error("订单详情为空，跳过入库逻辑，订单ID: {}",msg.getOrderNumber());
+        }
 
         // 3. 扣数据库库存（必须做）
         for (ShoppingCart cart : msg.getCartList()) {
